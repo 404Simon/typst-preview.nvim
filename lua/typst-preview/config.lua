@@ -2,6 +2,7 @@ local M = {
   opts = {
     debug = false,
     open_cmd = nil,
+    use_native_webview = true, -- Use native typstview binary when available
     port = 0, -- tinymist will use a random port if this is 0
     invert_colors = 'never',
     follow_cursor = true,

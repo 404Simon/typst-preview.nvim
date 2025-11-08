@@ -3,6 +3,10 @@ local utils = require 'typst-preview.utils'
 
 local M = {}
 
+---Scroll debounce timer
+local scroll_timer = nil
+local scroll_cancelled = false
+
 ---Register event listener
 ---@param s Server
 function M.add_listeners(s)
@@ -27,9 +31,19 @@ function M.add_listeners(s)
         column = max_column
       end
       vim.api.nvim_win_set_cursor(0, { row, column })
-      vim.defer_fn(function()
-        s.suppress = false
-      end, 100)
+      -- Cancel any existing scroll timer
+      if scroll_timer then
+        scroll_cancelled = true
+        vim.fn.timer_stop(scroll_timer)
+      end
+
+      scroll_cancelled = false
+      scroll_timer = vim.fn.timer_start(50, function()
+        if not scroll_cancelled then
+          s.suppress = false
+        end
+        scroll_timer = nil
+      end)
     end
 
     if event.filepath ~= utils.get_buf_path(0) then

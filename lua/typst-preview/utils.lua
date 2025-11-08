@@ -33,10 +33,10 @@ end
 function M.is_arm64()
   local machine = vim.uv.os_uname().machine
   return machine == 'aarch64'
-      or machine == 'aarch64_be'
-      or machine == 'armv8b'
-      or machine == 'armv8l'
-      or machine == 'arm64'
+    or machine == 'aarch64_be'
+    or machine == 'armv8b'
+    or machine == 'armv8l'
+    or machine == 'arm64'
 end
 
 local open_cmd
@@ -50,10 +50,67 @@ else
   open_cmd = 'xdg-open'
 end
 
+---Cached typstview binary path
+---@type string|nil|false
+local typstview_path_cache = nil
+
+---Get path to typstview binary (cached)
+---@return string|nil
+local function get_typstview_path()
+  if typstview_path_cache ~= nil then
+    if typstview_path_cache == false then
+      return nil
+    else
+      return typstview_path_cache
+    end
+  end
+
+  -- Check in plugin directory first
+  local plugin_path = vim.fn.fnamemodify(
+    vim.fn.resolve(debug.getinfo(1, 'S').source:sub(2)),
+    ':p:h:h:h'
+  ) .. '/typstview/typstview'
+
+  if M.file_exist(plugin_path) and vim.fn.executable(plugin_path) == 1 then
+    typstview_path_cache = plugin_path
+    return plugin_path
+  end
+
+  -- Check in PATH
+  if vim.fn.executable 'typstview' == 1 then
+    typstview_path_cache = 'typstview'
+    return 'typstview'
+  end
+
+  typstview_path_cache = false
+  return nil
+end
+
 ---Open link in browser (platform agnostic)
 ---@param link string
 function M.visit(link)
   local cmd
+
+  -- Try to use native typstview binary first (if enabled and not explicitly overridden)
+  if config.opts.use_native_webview and config.opts.open_cmd == nil then
+    local typstview = get_typstview_path()
+    if typstview ~= nil then
+      cmd = string.format('%s http://%s', vim.fn.shellescape(typstview), link)
+      M.debug('Opening preview with native webview: ' .. cmd)
+      vim.fn.jobstart(cmd, {
+        detach = true,
+        on_stderr = function(_, data)
+          local msg = table.concat(data or {}, '\n')
+          if msg ~= '' then
+            print('typst-preview native webview failed: ' .. msg)
+          end
+        end,
+      })
+      return
+    end
+  end
+
+  -- Fall back to browser
   if config.opts.open_cmd ~= nil then
     cmd = string.format(config.opts.open_cmd, 'http://' .. link)
   else
@@ -126,7 +183,7 @@ function M.debug(data)
   if config.opts.debug then
     local err
     if file == nil then
-      file, err = io.open(M.get_data_path() .. 'log.txt', "a")
+      file, err = io.open(M.get_data_path() .. 'log.txt', 'a')
     end
     if file == nil then
       error("Can't open record file!: " .. err)
